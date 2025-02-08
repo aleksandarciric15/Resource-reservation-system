@@ -1,0 +1,9 @@
+{
+  "baseApiPathUser": "http://localhost:8081",
+  "baseApiPathDepartment": "http://localhost:8082",
+  "baseApiPathReservation": "http://localhost:8083",
+  "baseApiPathResource": "http://localhost:8084",
+  "baseApiPathApiComposition": "http://localhost:8085",
+  "baseApiPathApiNotification": "http://localhost:8086",
+  "apiResourcePrefix": "/api/v1"
+}

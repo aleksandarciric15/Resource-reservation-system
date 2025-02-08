@@ -1,0 +1,194 @@
+services:
+  keycloak-db:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloakpassword
+      POSTGRES_DB: keycloak
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    ports: 
+      - 5432:5432
+    networks:
+      - keycloak-network
+
+  rabbitmq:
+    image: rabbitmq:management-alpine
+    container_name: rabbitmq
+    environment:
+      - RABBITMQ_NODENAME=rabbit@rabbitmq    # Used for case, loading previously stored data in volume (now it will not create for new container some random number after rabbitmq@)
+    volumes: 
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf  # Mount config file
+      - rabbitmq-data:/var/lib/rabbitmq  # Persist RabbitMQ data
+    ports:
+      - 5672:5672  
+      - 15672:15672 
+    networks:
+      - keycloak-network
+      
+  keycloak:
+    image: custom-keycloak:26.0.7
+    environment:
+      DB_VENDOR: postgres
+      DB_ADDR: keycloak-db:5432
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_PASSWORD: keycloakpassword
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloakpassword
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+
+      # Rabbitmq connection
+      KK_TO_RMQ_URL: rabbitmq  
+      KK_TO_RMQ_PORT: 5672
+      KK_TO_RMQ_VHOST: /
+      KK_TO_RMQ_EXCHANGE: amq.topic
+      KK_TO_RMQ_USERNAME: keycloak_user
+      KK_TO_RMQ_PASSWORD: keycloak_pass
+      
+      RABBITMQ_DEFAULT_USER: keycloak_user
+      RABBITMQ_DEFAULT_PASS: keycloak_pass
+      RABBITMQ_DEFAULT_VHOST: /
+
+      # Debug mode to help with RabbitMQ connection
+      KC_SPI_EVENTS_LISTENER: rabbitmq-listener
+
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+    ports:
+      - 8080:8080
+    networks:
+      - keycloak-network
+    command: start-dev
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: pisio_project     
+      MYSQL_PASSWORD: pisio_project
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql-init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - keycloak-network
+
+  user-service:
+    image: user-service:latest
+    container_name: user-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/user_service
+      SPRING_DATASOURCE_USERNAME: pisio_project
+      SPRING_DATASOURCE_PASSWORD: pisio_project
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: keycloak_user
+      SPRING_RABBITMQ_PASSWORD: keycloak_pass
+      SPRING_RABBITMQ_VIRTUAL_HOST: /
+    ports:
+      - 8081:8081
+    depends_on:
+      - mysql
+      - rabbitmq
+    networks:
+      - keycloak-network
+
+  department-service:
+    image: department-service:latest
+    container_name: department-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/department_service
+      SPRING_DATASOURCE_USERNAME: pisio_project
+      SPRING_DATASOURCE_PASSWORD: pisio_project
+    ports:
+      - 8082:8082
+    depends_on:
+      - mysql
+    networks:
+      - keycloak-network
+
+  reservation-service:
+    image: reservation-service:latest
+    container_name: reservation-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/reservation_service
+      SPRING_DATASOURCE_USERNAME: pisio_project
+      SPRING_DATASOURCE_PASSWORD: pisio_project
+      NOTIFICATIONS_URL: http://notification-service:8086/api/v1/notifications
+    ports:
+      - 8083:8083
+    depends_on:
+      - mysql
+    networks:
+      - keycloak-network
+
+  resource-service:
+    image: resource-service:latest
+    container_name: resource-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/resource_service
+      SPRING_DATASOURCE_USERNAME: pisio_project
+      SPRING_DATASOURCE_PASSWORD: pisio_project
+      RESERVATIONS_URL: http://reservation-service:8083/api/v1/reservations
+    ports:
+      - 8084:8084
+    depends_on:
+      - mysql
+    networks:
+      - keycloak-network
+
+  api-composition:
+    image: api-composition:latest
+    container_name: api-composition
+    environment:
+    - RESERVATIONS_URL=http://reservation-service:8083/api/v1/reservations
+    - RESOURCES_URL=http://resource-service:8084/api/v1/resources
+    - USERS_URL=http://user-service:8081/api/v1/users
+    ports:
+      - 8085:8085
+    depends_on:
+      - mysql
+    networks:
+      - keycloak-network
+
+  notification-service:
+    image: notification-service:latest
+    container_name: notification-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/notification_service
+      SPRING_DATASOURCE_USERNAME: pisio_project
+      SPRING_DATASOURCE_PASSWORD: pisio_project
+    ports:
+      - 8086:8086
+    depends_on:
+      - mysql
+    networks:
+      - keycloak-network
+
+  front-app:
+    image: front-app:latest
+    container_name: front-app
+    environment:
+      - NODE_ENV=development
+    ports:
+      - 3000:3000
+    networks:
+      - keycloak-network
+
+      
+
+volumes:
+  keycloak_data:
+  keycloak-db-data:
+  rabbitmq-data:
+  mysql-data:
+
+networks:
+  keycloak-network:
+    driver: bridge

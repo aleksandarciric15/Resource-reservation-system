@@ -1,0 +1,22 @@
+!! Create your application.properties file and fill necessary fields !!
+
+spring.application.name=<app_name>
+
+server.port=<port_number>
+
+spring.datasource.url=<mysql_database>
+spring.datasource.username=<username>
+spring.datasource.password=<password>
+spring.datasource.driver-class-name=<mysql_jdbc_driver>
+spring.jpa.show-sql=true
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.hibernate.naming.physical-strategy=org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+
+
+reservation_service.base-url=/api/v1
+
+
+# Security
+jwt.auth.converter.resource-id=<client>
+jwt.auth.converter.principle-attribute=<username>
+
